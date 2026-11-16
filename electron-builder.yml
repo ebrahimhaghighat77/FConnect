@@ -1,0 +1,31 @@
+appId: app.fconnect.client
+productName: FConnect
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: resources/bin
+    to: bin
+  - from: resources/icon.png
+    to: icon.png
+  - from: LICENSE
+    to: LICENSE.txt
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+win:
+  icon: build/icon.ico
+  requestedExecutionLevel: requireAdministrator
+  target:
+    - target: nsis
+      arch: x64
+    - target: portable
+      arch: x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: FConnect-Setup-${version}.${ext}
+portable:
+  artifactName: FConnect-Portable-${version}.${ext}
