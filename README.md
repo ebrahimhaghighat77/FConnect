@@ -1,5 +1,7 @@
 # FConnect
 
+[![Latest release](https://img.shields.io/github/v/release/ebrahimhaghighat77/FConnect)](https://github.com/ebrahimhaghighat77/FConnect/releases/latest) [![Downloads](https://img.shields.io/github/downloads/ebrahimhaghighat77/FConnect/total)](https://github.com/ebrahimhaghighat77/FConnect/releases)
+
 Send only the games and apps you pick through your v2ray / Xray server on Windows. Everything else, including voice chat and downloads you did not pick, stays on your normal connection and is never touched, not even while you connect or disconnect.
 
 ![FConnect home screen](docs/home.png)
