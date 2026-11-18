@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, protocol, session, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, protocol, session, shell, Tray } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
@@ -22,6 +22,7 @@ import { customFromExe, customFromFolder, detectApps, imageFiles, runningProcess
 import { testProfiles } from './ping'
 import { data, save } from './store'
 import { Tunnel, type AppStats } from './tunnel'
+import { RELEASES_URL, Updater } from './updater'
 import { matchesApp, ProcessWatcher } from './watcher'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'fc-img', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
@@ -57,7 +58,8 @@ const DEFAULTS: Record<ToggleSetting, boolean> = {
   autoConnect: true,
   autoServer: true,
   failover: true,
-  launchAtLogin: false
+  launchAtLogin: false,
+  autoUpdate: true
 }
 const setting = (k: ToggleSetting): boolean => data.settings[k] ?? DEFAULTS[k]
 
@@ -89,6 +91,12 @@ const tunnel = new Tunnel(
     }
   },
   { verbose: () => setting('verbose'), killSwitch: () => setting('killSwitch'), failover: () => setting('failover') }
+)
+
+const updater = new Updater(
+  () => broadcast(),
+  (text) => pushLog('app', text),
+  () => tunnel.proxyPort
 )
 
 const watcher = new ProcessWatcher((paths) => {
@@ -158,7 +166,8 @@ function snapshot(): Snapshot {
     elevated,
     driver,
     systemProxy,
-    testing: [...testing]
+    testing: [...testing],
+    update: updater.state
   }
 }
 
@@ -443,11 +452,27 @@ const handlers: Record<string, (...args: any[]) => unknown> = {
   setSetting: async (key: ToggleSetting, on: boolean) => {
     if (!(key in DEFAULTS)) throw new Error(`unknown setting ${key}`)
     if (key === 'launchAtLogin') await setLaunchAtLogin(on)
+    if (key === 'autoUpdate') updater.auto(on)
     data.settings[key as keyof Settings] = on as never
     save()
     broadcast()
     syncWatcher()
-  }
+  },
+  checkUpdate: () => updater.check(),
+  downloadUpdate: () => updater.download(),
+  installUpdate: async () => {
+    if (updater.state.status !== 'ready') return
+    const game = tunnel.live && selectedApps().find((a) => a.kind === 'game' && runningIds.has(a.id))
+    if (game) throw new Error(`Close ${game.name} first. Updating restarts FConnect, so the game would lose the tunnel for a moment.`)
+    data.resumeAfterUpdate = tunnel.live || undefined
+    save()
+    quitting = true
+    watcher.stop()
+    await tunnel.disconnect()
+    await killStaleCores()
+    updater.install()
+  },
+  openReleases: () => shell.openExternal(RELEASES_URL)
 }
 
 if (!app.isPackaged) {
@@ -563,4 +588,10 @@ void app.whenReady().then(async () => {
   updateTray()
   createWindow()
   syncWatcher()
+  updater.auto(setting('autoUpdate'))
+  if (data.resumeAfterUpdate) {
+    data.resumeAfterUpdate = undefined
+    save()
+    if (elevated && activeProfile()) void userConnect().catch(() => undefined)
+  }
 })

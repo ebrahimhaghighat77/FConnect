@@ -1,4 +1,4 @@
-import { Gamepad2, House, Minus, ScrollText, Server, Settings2, ShieldAlert, X } from 'lucide-react'
+import { ArrowDownToLine, Gamepad2, House, Minus, ScrollText, Server, Settings2, ShieldAlert, X } from 'lucide-react'
 import { useState } from 'react'
 import { useSnapshot } from './lib'
 import { Home } from './pages/Home'
@@ -38,6 +38,8 @@ export function App() {
   const snap = useSnapshot()
   const [page, setPage] = useState<Page>('home')
   const status = snap?.tunnel.status ?? 'disconnected'
+  const update = snap?.update
+  const showUpdate = !!update && ['available', 'downloading', 'ready'].includes(update.status)
 
   return (
     <div className="flex h-full flex-col">
@@ -83,7 +85,17 @@ export function App() {
               </button>
             )
           })}
-          <div className="mt-auto flex flex-col items-center gap-1.5 text-[11px] text-muted" title={`Tunnel ${status}`}>
+          {update && showUpdate && (
+            <button
+              onClick={() => setPage('settings')}
+              title={`FConnect ${update.version} is available`}
+              className="mt-auto mb-3 flex w-[68px] flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-medium text-cyan hover:bg-raised"
+            >
+              <ArrowDownToLine className="size-5" />
+              {update.status === 'ready' ? 'Restart' : 'Update'}
+            </button>
+          )}
+          <div className={`flex flex-col items-center gap-1.5 text-[11px] text-muted ${showUpdate ? '' : 'mt-auto'}`} title={`Tunnel ${status}`}>
             <span
               className={`size-2.5 rounded-full ${
                 status === 'connected' ? 'bg-live shadow-[0_0_10px] shadow-live' : status === 'disconnected' ? 'bg-faint' : status === 'reconnecting' ? 'breathe bg-warn' : 'breathe bg-cyan'

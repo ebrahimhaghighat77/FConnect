@@ -8,6 +8,7 @@ export interface Data {
   subscriptions: Subscription[]
   customApps: AppEntry[]
   settings: Settings
+  resumeAfterUpdate?: boolean
 }
 
 const dir = app.getPath('userData')

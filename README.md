@@ -23,7 +23,7 @@ Windows 10 or 11, 64-bit.
 
 ## Using it
 
-1. **Servers**: paste v2ray links from the clipboard, paste text or base64, add a subscription link, or paste a full Xray JSON config. *Test all* measures each server.
+1. **Servers**: paste links from the clipboard, paste text or base64, add a subscription link, or import a file (WireGuard `.conf`, Xray JSON or a list). *Test all* measures each server.
 2. **Library**: tick the games and apps that should use the tunnel. Steam and Epic games, Discord, Claude and everything in your Start menu show up on their own. *Add app* covers anything else: an `.exe`, a whole folder, or a running program.
 3. **Connect**. With *Connect when a picked game starts* turned on, FConnect connects by itself when one of your games opens.
 
@@ -37,6 +37,7 @@ Windows 10 or 11, 64-bit.
 - Kill switch: if the server drops, picked apps pause instead of falling back to your real IP.
 - Fastest-server selection, plus automatic failover when a server stops answering.
 - Auto-connect when a picked game starts, and start with Windows.
+- In-app updates: FConnect checks GitHub for a new version and installs it when you choose, then reconnects. It won't restart while a picked game is using the tunnel. The portable build points you to the download page instead.
 - Every one of these can be switched off in Settings.
 
 ![Settings](docs/settings.png)

@@ -110,9 +110,20 @@ export interface Settings {
   autoServer?: boolean
   failover?: boolean
   launchAtLogin?: boolean
+  autoUpdate?: boolean
 }
 
-export type ToggleSetting = 'verbose' | 'killSwitch' | 'autoConnect' | 'autoServer' | 'failover' | 'launchAtLogin'
+export type ToggleSetting = 'verbose' | 'killSwitch' | 'autoConnect' | 'autoServer' | 'failover' | 'launchAtLogin' | 'autoUpdate'
+
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error'
+  current: string
+  portable: boolean
+  version?: string
+  size?: number
+  percent?: number
+  error?: string
+}
 
 export type TunnelStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'disconnecting'
 
@@ -165,6 +176,7 @@ export interface Snapshot {
   driver: boolean
   systemProxy?: string
   testing: string[]
+  update: UpdateState
 }
 
 export interface ImportSummary {
@@ -194,6 +206,10 @@ export interface FcApi {
   disconnect(): Promise<void>
   logs(): Promise<LogLine[]>
   setSetting(key: ToggleSetting, on: boolean): Promise<void>
+  checkUpdate(): Promise<void>
+  downloadUpdate(): Promise<void>
+  installUpdate(): Promise<void>
+  openReleases(): Promise<void>
   windowAction(action: 'minimize' | 'close'): void
   onState(cb: (s: Snapshot) => void): () => void
   onTraffic(cb: (t: Traffic) => void): () => void

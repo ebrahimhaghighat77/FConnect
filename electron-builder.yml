@@ -29,3 +29,8 @@ nsis:
   artifactName: FConnect-Setup-${version}.${ext}
 portable:
   artifactName: FConnect-Portable-${version}.${ext}
+publish:
+  provider: github
+  owner: ebrahimhaghighat77
+  repo: FConnect
+  releaseType: release
