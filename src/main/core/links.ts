@@ -10,7 +10,7 @@ interface RawLink {
   name: string
 }
 
-const LINK_RE = /^([a-z0-9]+):\/\/(?:([^@/?#]*)@)?(\[[^\]]+\]|[^:/?#]+)(?::([^/?#]*))?[^?#]*(?:\?([^#]*))?(?:#(.*))?$/i
+const LINK_RE = /^([a-z0-9+]+):\/\/(?:([^@/?#]*)@)?(\[[^\]]+\]|[^:/?#]+)(?::([^/?#]*))?[^?#]*(?:\?([^#]*))?(?:#(.*))?$/i
 
 function safeDecode(s: string): string {
   try {
@@ -246,6 +246,109 @@ function parseTuic(r: RawLink): ProxyNode {
   return n
 }
 
+// URLSearchParams turns '+' into a space, which breaks base64 keys written without percent-encoding.
+const b64 = (v: string | null | undefined) => (v ? v.trim().replace(/ /g, '+') : undefined)
+
+function parseReserved(v: string | null | undefined): number[] | undefined {
+  if (!v) return undefined
+  const nums = v.split(',').map((s) => Number(s.trim()))
+  if (nums.length === 3 && nums.every((x) => Number.isInteger(x) && x >= 0 && x < 256)) return nums
+  const bytes = [...Buffer.from(b64(v)!, 'base64')]
+  return bytes.length === 3 ? bytes : undefined
+}
+
+function wireguardNode(host: string, port: string, f: Record<string, string | undefined>): ProxyNode {
+  const n = base('wireguard', host, toPort(port))
+  n.privateKey = b64(f.privateKey)
+  n.peerPublicKey = b64(f.publicKey)
+  n.preSharedKey = b64(f.preSharedKey)
+  n.localAddress = list(f.address)?.map((a) => (a.includes('/') ? a : `${a}/${a.includes(':') ? 128 : 32}`))
+  n.mtu = Number(f.mtu) || undefined
+  n.reserved = parseReserved(f.reserved)
+  n.keepAlive = Number(f.keepAlive) || undefined
+  if (!n.privateKey || !n.peerPublicKey) throw new Error('WireGuard needs a private key and the peer public key')
+  if (!n.localAddress?.length) throw new Error('WireGuard needs the interface address')
+  return n
+}
+
+function parseWireguardLink(r: RawLink): ProxyNode {
+  const q = (...keys: string[]) => keys.map((k) => r.query.get(k)).find((v) => v) ?? undefined
+  return wireguardNode(r.host, r.port, {
+    privateKey: r.user || q('privatekey', 'pk', 'secretkey'),
+    publicKey: q('publickey', 'peer_pk', 'peerpublickey'),
+    preSharedKey: q('presharedkey', 'pre_shared_key', 'psk'),
+    address: q('address', 'local_address', 'ip'),
+    mtu: q('mtu'),
+    reserved: q('reserved'),
+    keepAlive: q('keepalive', 'persistentkeepalive')
+  })
+}
+
+const AMNEZIA_KEYS = /^(jc|jmin|jmax|s1|s2|h1|h2|h3|h4)$/i
+
+export function parseWireguardConf(text: string, fallbackName = ''): Profile {
+  const sections: Record<string, Record<string, string>> = {}
+  let current = ''
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/[#;].*$/, '').trim()
+    const head = /^\[(\w+)\]$/.exec(line)
+    if (head) {
+      current = head[1].toLowerCase()
+      sections[current] ??= {}
+      continue
+    }
+    const kv = /^([^=]+)=(.*)$/.exec(line)
+    if (kv && current) sections[current][kv[1].trim().toLowerCase()] = kv[2].trim()
+  }
+  const i = sections.interface ?? {}
+  const p = sections.peer ?? {}
+  if (Object.keys(i).some((k) => AMNEZIA_KEYS.test(k))) throw new Error('AmneziaWG configs (Jc, S1, H1…) are not supported yet')
+  const endpoint = /^(\[[^\]]+\]|[^:]+):(\d+)$/.exec(p.endpoint ?? '')
+  if (!endpoint) throw new Error('WireGuard [Peer] has no Endpoint host:port')
+  const node = wireguardNode(endpoint[1].replace(/^\[|\]$/g, ''), endpoint[2], {
+    privateKey: i.privatekey,
+    publicKey: p.publickey,
+    preSharedKey: p.presharedkey,
+    address: i.address,
+    mtu: i.mtu,
+    keepAlive: p.persistentkeepalive
+  })
+  const comment = /^#\s*(?:name\s*[:=]\s*)?(.+)$/im.exec(text.trim().split(/\r?\n/)[0] ?? '')?.[1]
+  return nodeProfile(node, comment?.trim() || fallbackName || `WireGuard ${node.server}`)
+}
+
+function parseSsh(r: RawLink): ProxyNode {
+  const n = base('ssh', r.host, r.port ? toPort(r.port) : 22)
+  const colon = r.user.indexOf(':')
+  n.username = colon >= 0 ? r.user.slice(0, colon) : r.user || 'root'
+  n.password = colon >= 0 ? r.user.slice(colon + 1) : r.query.get('password') || undefined
+  n.privateKey = r.query.get('pk') || r.query.get('private_key') || undefined
+  if (!n.password && !n.privateKey) throw new Error('SSH link has no password or private key')
+  return n
+}
+
+function parseAnytls(r: RawLink): ProxyNode {
+  const n = base('anytls', r.host, toPort(r.port))
+  if (!r.user) throw new Error('missing password')
+  n.password = r.user
+  n.security = 'tls'
+  n.sni = r.query.get('sni') || r.query.get('peer') || undefined
+  n.alpn = list(r.query.get('alpn'))
+  n.insecure = flag(r.query.get('insecure')) || flag(r.query.get('allowInsecure'))
+  return n
+}
+
+function parseNaive(r: RawLink): ProxyNode {
+  if (r.scheme !== 'naive+https') throw new Error('only naive+https links are supported')
+  const n = base('naive', r.host, r.port ? toPort(r.port) : 443)
+  const colon = r.user.indexOf(':')
+  n.username = colon >= 0 ? r.user.slice(0, colon) : r.user
+  n.password = colon >= 0 ? r.user.slice(colon + 1) : undefined
+  n.security = 'tls'
+  n.sni = r.query.get('sni') || undefined
+  return n
+}
+
 function needsXray(n: ProxyNode): boolean {
   return (
     n.network === 'xhttp' ||
@@ -259,6 +362,7 @@ function needsXray(n: ProxyNode): boolean {
 
 // Xray 26 refuses h2, allowInsecure and plaintext VLESS, so those fall back to sing-box.
 export function pickEngine(n: ProxyNode): Engine {
+  if (n.protocol === 'wireguard') return 'xray'
   if (!['vless', 'vmess', 'trojan'].includes(n.protocol)) return 'sing-box'
   if (needsXray(n)) return 'xray'
   if (n.network === 'h2' || (n.security === 'tls' && n.insecure) || (n.protocol === 'vless' && n.security === 'none')) return 'sing-box'
@@ -267,6 +371,9 @@ export function pickEngine(n: ProxyNode): Engine {
 
 function transportLabel(n: ProxyNode): string {
   if (n.protocol === 'hysteria2' || n.protocol === 'tuic') return 'quic'
+  if (n.protocol === 'wireguard') return 'udp'
+  if (n.protocol === 'ssh') return 'tcp'
+  if (n.protocol === 'anytls' || n.protocol === 'naive') return 'tls'
   if (n.protocol === 'shadowsocks' || n.protocol === 'socks') return n.plugin ?? 'tcp'
   return n.security === 'none' ? n.network : `${n.network} ${n.security}`
 }
@@ -306,6 +413,17 @@ export function parseLink(line: string): Profile {
                 : parseSocks(r)
       return nodeProfile(node, r.name)
     }
+    case 'wireguard':
+    case 'wg':
+    case 'ssh':
+    case 'anytls':
+    case 'naive+https':
+    case 'naive+quic': {
+      const r = splitLink(line)
+      const node =
+        scheme === 'ssh' ? parseSsh(r) : scheme === 'anytls' ? parseAnytls(r) : scheme.startsWith('naive') ? parseNaive(r) : parseWireguardLink(r)
+      return nodeProfile(node, r.name)
+    }
     case 'vmess': {
       const { node, name } = parseVmess(line.slice('vmess://'.length).split('#')[0])
       return nodeProfile(node, name)
@@ -342,16 +460,25 @@ export interface ImportResult {
   errors: string[]
 }
 
-export function parseImport(text: string): ImportResult {
+export function parseImport(text: string, name?: string): ImportResult {
   const trimmed = text.replace(/^﻿/, '').trim()
   const result: ImportResult = { profiles: [], errors: [] }
   if (!trimmed) return result
+
+  if (/^\s*\[Interface\]/im.test(trimmed)) {
+    try {
+      result.profiles.push(parseWireguardConf(trimmed, name))
+    } catch (e) {
+      result.errors.push((e as Error).message)
+    }
+    return result
+  }
 
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
       const json = JSON.parse(trimmed)
       const items = Array.isArray(json) ? json : [json]
-      items.forEach((item, i) => result.profiles.push(xrayJsonProfile(item, `Xray config ${i + 1}`)))
+      items.forEach((item, i) => result.profiles.push(xrayJsonProfile(item, `${name ?? 'Xray config'}${items.length > 1 || !name ? ` ${i + 1}` : ''}`)))
     } catch (e) {
       result.errors.push(`JSON: ${(e as Error).message}`)
     }

@@ -76,6 +76,17 @@ export function singboxOutbound(n: ProxyNode, tag: string): Json {
         udp_relay_mode: n.udpRelayMode,
         tls: { enabled: true, server_name: n.sni || n.server, insecure: n.insecure || undefined, alpn: n.alpn ?? ['h3'] }
       }
+    case 'ssh':
+      return { ...common, type: 'ssh', user: n.username, password: n.password, private_key: n.privateKey }
+    case 'anytls':
+      return {
+        ...common,
+        type: 'anytls',
+        password: n.password,
+        tls: { enabled: true, server_name: n.sni || n.server, insecure: n.insecure || undefined, alpn: n.alpn }
+      }
+    case 'naive':
+      return { ...common, type: 'naive', username: n.username, password: n.password, tls: { enabled: true, server_name: n.sni || n.server } }
     default:
       throw new Error(`unsupported protocol ${n.protocol}`)
   }

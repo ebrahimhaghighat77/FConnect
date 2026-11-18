@@ -59,7 +59,35 @@ function streamSettings(n: ProxyNode): Json {
   return s
 }
 
+function wireguardOutbound(n: ProxyNode, tag: string): Json {
+  const v4 = n.localAddress?.some((a) => !a.includes(':'))
+  return {
+    tag,
+    protocol: 'wireguard',
+    settings: {
+      secretKey: n.privateKey,
+      address: n.localAddress,
+      mtu: n.mtu,
+      reserved: n.reserved,
+      peers: [
+        {
+          publicKey: n.peerPublicKey,
+          preSharedKey: n.preSharedKey,
+          endpoint: `${n.server.includes(':') ? `[${n.server}]` : n.server}:${n.port}`,
+          allowedIPs: ['0.0.0.0/0', '::/0'],
+          keepAlive: n.keepAlive
+        }
+      ],
+      domainStrategy: v4 ? 'ForceIPv4' : 'ForceIPv6'
+    }
+  }
+}
+
+// WireGuard resolves names on this PC, so DNS has to ride the tunnel or Iran's poisoned answers win.
+const WG_DNS = { tag: 'fc-dns', servers: ['1.1.1.1', '8.8.8.8'] }
+
 export function xrayOutbounds(n: ProxyNode, tag: string): Json[] {
+  if (n.protocol === 'wireguard') return [wireguardOutbound(n, tag)]
   let settings: Json
   if (n.protocol === 'vless') {
     settings = { vnext: [{ address: n.server, port: n.port, users: [{ id: n.uuid, encryption: n.encryption || 'none', flow: n.flow ?? '' }] }] }
@@ -92,6 +120,7 @@ export function xrayTunnelConfig(p: Profile, ports: TunnelPorts, verbose = false
       ? (structuredClone(p.xrayJson.outbounds) as Json[])
       : xrayOutbounds(p.node!, 'proxy')
   if (!proxy[0].tag) proxy[0].tag = 'proxy'
+  const wg = !ports.native && !p.xrayJson && p.node?.protocol === 'wireguard'
   const userRouting = !ports.native && p.xrayJson?.routing ? (structuredClone(p.xrayJson.routing) as Json) : undefined
   const rules = [{ ip: PRIVATE, outboundTag: 'direct' }, ...(((userRouting?.rules as Json[]) ?? []))]
   const appInbounds = ports.apps.map(({ id, port }) => ({
@@ -105,6 +134,7 @@ export function xrayTunnelConfig(p: Profile, ports: TunnelPorts, verbose = false
   return {
     ...(!ports.native && p.xrayJson ? structuredClone(p.xrayJson) : {}),
     api: undefined,
+    ...(wg ? { dns: WG_DNS } : {}),
     log: { loglevel: verbose ? 'info' : 'warning' },
     stats: {},
     policy: { system: { statsInboundUplink: true, statsInboundDownlink: true } },
@@ -114,7 +144,7 @@ export function xrayTunnelConfig(p: Profile, ports: TunnelPorts, verbose = false
     routing: {
       ...userRouting,
       domainStrategy: (userRouting?.domainStrategy as string) ?? 'AsIs',
-      rules: [...rules, { inboundTag: [...appInbounds.map((i) => i.tag), 'fc-probe'], outboundTag: proxy[0].tag }]
+      rules: [...rules, { inboundTag: [...appInbounds.map((i) => i.tag), 'fc-probe', ...(wg ? ['fc-dns'] : [])], outboundTag: proxy[0].tag }]
     }
   }
 }
@@ -141,6 +171,7 @@ export function xrayConfig(p: Profile, inbound: { port: number; protocol: 'socks
   if (!p.node) throw new Error('profile has no node')
   return {
     log,
+    ...(p.node.protocol === 'wireguard' ? { dns: WG_DNS } : {}),
     inbounds,
     outbounds: [...xrayOutbounds(p.node, 'proxy'), { tag: 'direct', protocol: 'freedom' }]
   }

@@ -14,6 +14,8 @@ const TMP = mkdtempSync(join(tmpdir(), 'fconnect-test-'))
 const UUID = 'b831381d-6324-4d53-ad4f-8cda48b30811'
 const PBK = 'Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw'
 const b64 = (s: string) => Buffer.from(s).toString('base64')
+const WG_KEY = 'eCtXsJZ27+4PbhDkHnB923tkUn2Gj59wZw5wFA75MnU='
+const WG_PUB = 'Cr8hWlKvtDt7nrvf+f0brNQQzabAqrjfBvas9pmowjo='
 
 const vmessLink = (o: Record<string, unknown>) =>
   'vmess://' + b64(JSON.stringify({ v: '2', ps: 'VM', add: 'vm.example.com', port: '443', id: UUID, aid: '0', scy: 'auto', ...o }))
@@ -51,7 +53,15 @@ const LINKS: Record<string, { link: string; engine: 'xray' | 'sing-box' }> = {
   hy2: { link: 'hysteria2://auth@a.example.com:443?sni=a.example.com&insecure=1&obfs=salamander&obfs-password=ob&mport=20000-30000#HY2', engine: 'sing-box' },
   hy2Range: { link: 'hy2://auth@a.example.com:443,20000-30000/?sni=a.example.com#HY2R', engine: 'sing-box' },
   tuic: { link: `tuic://${UUID}:pw@a.example.com:443?congestion_control=bbr&alpn=h3&sni=a.example.com&udp_relay_mode=native#TUIC`, engine: 'sing-box' },
-  socks: { link: `socks://${b64('u:p')}@1.2.3.4:1080#SOCKS`, engine: 'sing-box' }
+  socks: { link: `socks://${b64('u:p')}@1.2.3.4:1080#SOCKS`, engine: 'sing-box' },
+  wireguard: {
+    link: `wireguard://${encodeURIComponent(WG_KEY)}@wg.example.com:51820?publickey=${encodeURIComponent(WG_PUB)}&address=10.0.0.2%2F32,fd00::2%2F128&mtu=1420&reserved=1,2,3#WG`,
+    engine: 'xray'
+  },
+  wireguardHiddify: { link: `wg://162.159.192.1:2408?pk=${WG_KEY}&local_address=172.16.0.2&peer_pk=${WG_PUB}&mtu=1280#WGH`, engine: 'xray' },
+  ssh: { link: 'ssh://root:p%40ss@ssh.example.com:2222#SSH', engine: 'sing-box' },
+  anytls: { link: 'anytls://pw@a.example.com:443?sni=a.example.com&insecure=1#ANY', engine: 'sing-box' },
+  naive: { link: 'naive+https://user:pass@n.example.com:443#NAIVE', engine: 'sing-box' }
 }
 
 const APPS: AppEntry[] = [
@@ -141,6 +151,34 @@ describe('share links', () => {
     const [p] = parseImport(json).profiles
     expect(p).toMatchObject({ name: 'My JSON', engine: 'xray', address: 'j.example.com:443', transport: 'xhttp tls' })
     validate('xrayJson', p)
+  })
+})
+
+describe('WireGuard and friends', () => {
+  it('reads keys with a literal + from the query and fills /32 on bare addresses', () => {
+    const n = parseLink(LINKS.wireguardHiddify.link).node!
+    expect(n).toMatchObject({ privateKey: WG_KEY, peerPublicKey: WG_PUB, localAddress: ['172.16.0.2/32'], mtu: 1280 })
+    expect(parseLink(LINKS.wireguard.link).node).toMatchObject({ reserved: [1, 2, 3], localAddress: ['10.0.0.2/32', 'fd00::2/128'] })
+  })
+
+  it('imports a WireGuard .conf file', () => {
+    const conf = `# Office\n[Interface]\nPrivateKey = ${WG_KEY}\nAddress = 10.8.0.2/32, fd00::2/128\nDNS = 1.1.1.1\nMTU = 1380\n\n[Peer]\nPublicKey = ${WG_PUB}\nPresharedKey = ${WG_KEY}\nEndpoint = vpn.example.com:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`
+    const { profiles, errors } = parseImport(conf)
+    expect(errors).toEqual([])
+    expect(profiles[0]).toMatchObject({ name: 'Office', engine: 'xray', protocol: 'wireguard', address: 'vpn.example.com:51820' })
+    expect(profiles[0].node).toMatchObject({ preSharedKey: WG_KEY, keepAlive: 25, mtu: 1380 })
+    validate('wgConf', profiles[0])
+  })
+
+  it('explains that AmneziaWG is not supported', () => {
+    const awg = `[Interface]\nPrivateKey = ${WG_KEY}\nAddress = 10.8.0.2/32\nJc = 4\nS1 = 50\nH1 = 1\n[Peer]\nPublicKey = ${WG_PUB}\nEndpoint = 1.2.3.4:51820\n`
+    expect(parseImport(awg).errors[0]).toMatch(/AmneziaWG/)
+  })
+
+  it('keeps ssh, anytls and naive credentials', () => {
+    expect(parseLink(LINKS.ssh.link).node).toMatchObject({ username: 'root', password: 'p@ss', port: 2222 })
+    expect(parseLink(LINKS.anytls.link).node).toMatchObject({ password: 'pw', insecure: true })
+    expect(parseLink(LINKS.naive.link).node).toMatchObject({ username: 'user', password: 'pass' })
   })
 })
 

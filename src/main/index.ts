@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, protocol, session, Tray } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type {
   AppActivity,
@@ -332,6 +333,24 @@ const handlers: Record<string, (...args: any[]) => unknown> = {
   snapshot,
   importText: (text: string) => addProfiles(parseImport(text)),
   importClipboard: async () => addProfiles(parseImport(await clipboard.readText())),
+  importFile: async () => {
+    const res = await dialog.showOpenDialog(win!, {
+      title: 'Choose config files',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Configs', extensions: ['conf', 'json', 'txt'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    if (res.canceled || !res.filePaths.length) return null
+    const all: ImportResult = { profiles: [], errors: [] }
+    for (const path of res.filePaths) {
+      const r = parseImport(await readFile(path, 'utf8'), basename(path, extname(path)))
+      all.profiles.push(...r.profiles)
+      all.errors.push(...r.errors.map((e) => `${basename(path)}: ${e}`))
+    }
+    return addProfiles(all)
+  },
   addSubscription: async (url: string) => {
     const sub: Subscription = { id: randomUUID(), name: new URL(url).hostname, url }
     data.subscriptions.push(sub)

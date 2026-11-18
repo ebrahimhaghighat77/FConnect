@@ -18,6 +18,7 @@ const api: FcApi = {
   snapshot: call('snapshot'),
   importText: call('importText'),
   importClipboard: call('importClipboard'),
+  importFile: call('importFile'),
   addSubscription: call('addSubscription'),
   updateSubscription: call('updateSubscription'),
   removeSubscription: call('removeSubscription'),

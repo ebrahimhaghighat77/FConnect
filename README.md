@@ -46,8 +46,12 @@ Windows 10 or 11, 64-bit.
 - **vless, vmess, trojan**: REALITY, Vision, TLS, XHTTP, WebSocket, gRPC, HTTPUpgrade, mKCP and fragment.
 - **shadowsocks** (including 2022 ciphers and plugins), **socks**.
 - **hysteria2, tuic**.
+- **WireGuard**: `.conf` files (Import file, or paste the text) and `wireguard://` / `wg://` links, including Warp `reserved` bytes.
+- **SSH**, **NaïveProxy** (`naive+https://`) and **AnyTLS** links.
 - Subscription links in base64 or plain text, with data usage and expiry when the provider sends them.
 - Full Xray JSON configs.
+
+Not supported yet: AmneziaWG (configs with `Jc`, `S1`, `H1`…) and OpenVPN.
 
 ## Good to know
 
@@ -64,8 +68,8 @@ picked app ─► ProxiFyre (Windows Packet Filter driver) ─► Xray SOCKS (sn
 other apps ─► normal connection, untouched
 ```
 
-- **Xray-core** runs vless / vmess / trojan and full Xray JSON. Each picked app gets its own inbound, which is how traffic is counted per app.
-- **sing-box** runs what Xray can't: hysteria2, tuic, shadowsocks, socks, plaintext vless, `allowInsecure` TLS and h2. Xray stays in front so sniffing and stats work the same.
+- **Xray-core** runs vless / vmess / trojan, WireGuard and full Xray JSON. Each picked app gets its own inbound, which is how traffic is counted per app.
+- **sing-box** runs what Xray can't: hysteria2, tuic, shadowsocks, socks, SSH, NaïveProxy, AnyTLS, plaintext vless, `allowInsecure` TLS and h2. Xray stays in front so sniffing and stats work the same.
 - **ProxiFyre** redirects only the picked processes, by folder or exe name. IPv6 from picked apps is blocked so nothing leaks around the tunnel.
 - Xray sniffing replaces poisoned DNS answers with the real TLS or QUIC domain, so filtered sites work without changing system DNS.
 

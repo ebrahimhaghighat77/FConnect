@@ -6,6 +6,10 @@ export type Protocol =
   | 'socks'
   | 'hysteria2'
   | 'tuic'
+  | 'wireguard'
+  | 'ssh'
+  | 'anytls'
+  | 'naive'
 
 export interface ProxyNode {
   protocol: Protocol
@@ -47,6 +51,13 @@ export interface ProxyNode {
   udpRelayMode?: string
   plugin?: string
   pluginOpts?: string
+  privateKey?: string
+  peerPublicKey?: string
+  preSharedKey?: string
+  localAddress?: string[]
+  mtu?: number
+  reserved?: number[]
+  keepAlive?: number
 }
 
 export type Engine = 'sing-box' | 'xray'
@@ -165,6 +176,7 @@ export interface FcApi {
   snapshot(): Promise<Snapshot>
   importText(text: string): Promise<ImportSummary>
   importClipboard(): Promise<ImportSummary>
+  importFile(): Promise<ImportSummary | null>
   addSubscription(url: string): Promise<ImportSummary>
   updateSubscription(id: string): Promise<ImportSummary>
   removeSubscription(id: string): Promise<void>

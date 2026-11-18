@@ -1,4 +1,4 @@
-import { ClipboardPaste, Gauge, Link2, LoaderCircle, Pencil, RefreshCw, Trash2, Type } from 'lucide-react'
+import { ClipboardPaste, FileUp, Gauge, Link2, LoaderCircle, Pencil, RefreshCw, Trash2, Type } from 'lucide-react'
 import { useState } from 'react'
 import type { ImportSummary, Profile, Snapshot } from '../../../shared/types'
 import { Modal } from '../components/Modal'
@@ -29,7 +29,7 @@ function Usage({ sub }: { sub: Subscription }) {
 
 function report(r: ImportSummary): void {
   if (r.added) toast(`Added ${r.added} ${r.added === 1 ? 'server' : 'servers'}${r.errors.length ? `, skipped ${r.errors.length}` : ''}`)
-  else toast(r.errors[0] ? `Nothing added: ${r.errors[0]}` : 'No v2ray links found in that text', 'bad')
+  else toast(r.errors[0] ? `Nothing added: ${r.errors[0]}` : 'No servers found in that text', 'bad')
 }
 
 function ago(t?: number): string {
@@ -108,10 +108,12 @@ export function Servers({ snap }: { snap: Snapshot }) {
   const testing = new Set(snap.testing)
   const manual = snap.profiles.filter((p) => !p.subId)
 
-  const run = async (fn: () => Promise<ImportSummary>) => {
+  const run = async (fn: () => Promise<ImportSummary | null>) => {
     setBusy(true)
     try {
-      report(await fn())
+      const r = await fn()
+      if (!r) return
+      report(r)
       setDialog(null)
       setText('')
     } catch (e) {
@@ -139,28 +141,29 @@ export function Servers({ snap }: { snap: Snapshot }) {
 
   return (
     <div className="mx-auto w-full max-w-[980px] px-8 py-7">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+      <div className="flex items-end justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="font-display text-[30px] font-semibold tracking-tight">Servers</h1>
           <p className="mt-1 text-[13px] text-muted">
-            vless, vmess, trojan, shadowsocks, hysteria2, tuic, socks, subscriptions and full Xray JSON all work here.
+            v2ray links, WireGuard, Hysteria2, TUIC, Shadowsocks, SSH, NaïveProxy, AnyTLS, subscriptions and Xray JSON all work here.
           </p>
         </div>
         <button
           disabled={!snap.profiles.length || testing.size > 0}
           onClick={() => void window.fc.testProfiles([])}
-          className="flex h-9 items-center gap-2 rounded-lg border border-line px-3.5 text-[13px] hover:border-violet/60 disabled:opacity-50"
+          className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-line px-3.5 text-[13px] hover:border-violet/60 disabled:opacity-50"
         >
           {testing.size ? <LoaderCircle className="spin size-4" /> : <Gauge className="size-4" />}
           {testing.size ? `Testing ${testing.size}` : 'Test all'}
         </button>
       </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-3">
+      <div className="mt-6 grid grid-cols-2 gap-3">
         {[
           { icon: ClipboardPaste, title: 'Paste from clipboard', sub: 'Copied links or a whole list', run: () => run(() => window.fc.importClipboard()), primary: true },
           { icon: Type, title: 'Paste text', sub: 'Links, base64 or Xray JSON', run: () => setDialog('text') },
-          { icon: Link2, title: 'Add subscription', sub: 'A link from your provider', run: () => setDialog('sub') }
+          { icon: Link2, title: 'Add subscription', sub: 'A link from your provider', run: () => setDialog('sub') },
+          { icon: FileUp, title: 'Import file', sub: 'WireGuard .conf, JSON or a list', run: () => run(() => window.fc.importFile()) }
         ].map(({ icon: Icon, title, sub, run: go, primary }) => (
           <button
             key={title}
@@ -186,7 +189,7 @@ export function Servers({ snap }: { snap: Snapshot }) {
 
       {snap.profiles.length === 0 && (
         <p className="mt-14 text-center text-[13px] text-muted">
-          No servers yet. Copy a v2ray link from your provider, then choose Paste from clipboard.
+          No servers yet. Copy a link from your provider and choose Paste from clipboard, or import a WireGuard .conf file.
         </p>
       )}
 
@@ -217,7 +220,7 @@ export function Servers({ snap }: { snap: Snapshot }) {
                 autoFocus
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder={'vless://…\nvmess://…\nor a base64 block, or an Xray JSON config'}
+                placeholder={'vless://…\nwireguard://…\nor a base64 block, an Xray JSON config, or a WireGuard [Interface] config'}
                 className="h-48 w-full resize-none rounded-xl border border-line bg-void p-3 font-mono text-[12px] outline-none focus:border-violet/60"
               />
             ) : (
