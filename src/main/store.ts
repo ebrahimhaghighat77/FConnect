@@ -9,6 +9,7 @@ export interface Data {
   customApps: AppEntry[]
   settings: Settings
   resumeAfterUpdate?: boolean
+  gamingPause?: string
 }
 
 const dir = app.getPath('userData')

@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import type {
   AppActivity,
   AppEntry,
+  GamingState,
   ImportSummary,
   LogLine,
   Profile,
@@ -23,6 +24,7 @@ import { testProfiles } from './ping'
 import { data, save } from './store'
 import { Tunnel, type AppStats } from './tunnel'
 import { RELEASES_URL, Updater } from './updater'
+import { GamingMode } from './gaming'
 import { matchesApp, ProcessWatcher } from './watcher'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'fc-img', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
@@ -44,6 +46,7 @@ let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let apps: AppEntry[] = []
 let elevated = false
+let devAdmin: boolean | undefined
 let driver = false
 let installing = false
 let quitting = false
@@ -59,7 +62,8 @@ const DEFAULTS: Record<ToggleSetting, boolean> = {
   autoServer: true,
   failover: true,
   launchAtLogin: false,
-  autoUpdate: true
+  autoUpdate: true,
+  gamingMode: false
 }
 const setting = (k: ToggleSetting): boolean => data.settings[k] ?? DEFAULTS[k]
 
@@ -99,15 +103,29 @@ const updater = new Updater(
   () => tunnel.proxyPort
 )
 
+const gaming = new GamingMode(
+  () => broadcast(),
+  (text) => pushLog('app', text),
+  {
+    get: () => data.gamingPause,
+    set: (v) => {
+      data.gamingPause = v
+      save()
+    }
+  }
+)
+
 const watcher = new ProcessWatcher((paths) => {
   const selected = selectedApps()
   runningIds = new Set(selected.filter((a) => paths.some((p) => matchesApp(a, p))).map((a) => a.id))
   sendActivity()
   autoConnectTick(selected)
+  const game = setting('gamingMode') && elevated ? apps.find((a) => a.kind === 'game' && paths.some((p) => matchesApp(a, p))) : undefined
+  gaming.update(game?.name)
 })
 
 function syncWatcher(): void {
-  if (setting('autoConnect') || tunnel.live) watcher.start()
+  if (setting('autoConnect') || tunnel.live || setting('gamingMode')) watcher.start()
   else watcher.stop()
 }
 
@@ -163,11 +181,12 @@ function snapshot(): Snapshot {
     settings: data.settings,
     apps,
     tunnel: tunnel.state,
-    elevated,
+    elevated: devAdmin ?? elevated,
     driver,
     systemProxy,
     testing: [...testing],
-    update: updater.state
+    update: updater.state,
+    gaming: gaming.state
   }
 }
 
@@ -453,6 +472,7 @@ const handlers: Record<string, (...args: any[]) => unknown> = {
     if (!(key in DEFAULTS)) throw new Error(`unknown setting ${key}`)
     if (key === 'launchAtLogin') await setLaunchAtLogin(on)
     if (key === 'autoUpdate') updater.auto(on)
+    if (key === 'gamingMode' && !on) await gaming.release()
     data.settings[key as keyof Settings] = on as never
     save()
     broadcast()
@@ -468,7 +488,7 @@ const handlers: Record<string, (...args: any[]) => unknown> = {
     save()
     quitting = true
     watcher.stop()
-    await tunnel.disconnect()
+    await Promise.all([tunnel.disconnect(), gaming.release()])
     await killStaleCores()
     updater.install()
   },
@@ -485,6 +505,11 @@ if (!app.isPackaged) {
   handlers.devStop = (engine: 'xray' | 'proxifyre') => tunnel.devStop(engine)
   handlers.devQuit = () => setTimeout(() => app.quit(), 200)
   handlers.devAutostart = (on: boolean) => setLaunchAtLogin(on, { name: 'FConnect-devtest', exe: process.execPath })
+  handlers.devGaming = (state: GamingState, asAdmin: boolean) => {
+    devAdmin = asAdmin
+    gaming.state = state
+    broadcast()
+  }
 }
 
 for (const [name, fn] of Object.entries(handlers)) ipcMain.handle(`fc:${name}`, (_e, ...args) => fn(...args))
@@ -549,9 +574,9 @@ app.on('second-instance', (_e, argv) => (argv.includes('--replace') ? app.quit()
 app.on('before-quit', (e) => {
   quitting = true
   watcher.stop()
-  if (tunnel.state.status !== 'disconnected') {
+  if (tunnel.state.status !== 'disconnected' || gaming.state.active || data.gamingPause) {
     e.preventDefault()
-    void tunnel.disconnect().finally(() => app.quit())
+    void Promise.all([tunnel.disconnect(), gaming.release()]).finally(() => app.quit())
   }
 })
 
@@ -578,6 +603,7 @@ void app.whenReady().then(async () => {
   elevated = await isElevated()
   driver = await driverInstalled()
   await killStaleCores()
+  if (elevated) await gaming.release()
   apps = await detectApps(data.customApps)
   absorbCustomIntoPresets()
   await refreshSystemProxy()

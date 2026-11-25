@@ -37,6 +37,7 @@ Windows 10 or 11, 64-bit.
 - Kill switch: if the server drops, picked apps pause instead of falling back to your real IP.
 - Fastest-server selection, plus automatic failover when a server stops answering.
 - Auto-connect when a picked game starts, and start with Windows.
+- Gaming mode (on Home): while a game from your Library runs, Windows Update, driver and Store downloads wait, so the game gets your whole connection. They resume 30 seconds after you close it, and the update pause expires by itself after three hours.
 - In-app updates: FConnect checks GitHub for a new version and installs it when you choose, then reconnects. It won't restart while a picked game is using the tunnel. The portable build points you to the download page instead.
 - Every one of these can be switched off in Settings.
 

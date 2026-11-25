@@ -1,7 +1,7 @@
 {
   "name": "fconnect",
   "productName": "FConnect",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Per-app split tunnel for games and apps over Xray configs",
   "author": "ebrahimhaghighat77",
   "license": "MIT",

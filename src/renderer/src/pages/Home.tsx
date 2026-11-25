@@ -4,6 +4,7 @@ import type { Page } from '../App'
 import type { Snapshot } from '../../../shared/types'
 import { AppDetail } from '../components/AppDetail'
 import { AppThumb } from '../components/AppThumb'
+import { GamingCard } from '../components/GamingCard'
 import { PingGraph } from '../components/PingGraph'
 import { ProxyNotice } from '../components/ProxyNotice'
 import { RoutingRing } from '../components/RoutingRing'
@@ -31,6 +32,7 @@ export function Home({ snap, go }: { snap: Snapshot; go: (p: Page) => void }) {
   const sessionTotal = selected.reduce((n, a) => n + (activity[a.id]?.total ?? 0), 0)
   const sub = snap.subscriptions.find((s) => s.id === profile?.subId)
   const detailApp = selected.find((a) => a.id === detail)
+  const ring = width < 1150 ? 370 : 460
 
   const press = () => {
     const action = on || holding ? window.fc.disconnect() : window.fc.connect()
@@ -39,13 +41,14 @@ export function Home({ snap, go }: { snap: Snapshot; go: (p: Page) => void }) {
 
   return (
     <div className="mx-auto flex w-full max-w-[1080px] items-start gap-8 px-8 py-8">
-      <div className="flex flex-col items-center">
-        <RoutingRing apps={selected} activity={activity} status={tunnel.status} onPress={press} size={width < 1150 ? 370 : 460} />
+      <div className="flex shrink-0 flex-col items-center" style={{ width: ring }}>
+        <RoutingRing apps={selected} activity={activity} status={tunnel.status} onPress={press} size={ring} />
         {selected.length === 0 && (
           <button onClick={() => go('library')} className="-mt-4 text-[13px] text-cyan hover:underline">
             Pick the games and apps that should use the tunnel
           </button>
         )}
+        <GamingCard snap={snap} />
       </div>
 
       <section className="@container flex min-w-0 flex-1 flex-col gap-5">

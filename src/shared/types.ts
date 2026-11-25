@@ -111,9 +111,16 @@ export interface Settings {
   failover?: boolean
   launchAtLogin?: boolean
   autoUpdate?: boolean
+  gamingMode?: boolean
 }
 
-export type ToggleSetting = 'verbose' | 'killSwitch' | 'autoConnect' | 'autoServer' | 'failover' | 'launchAtLogin' | 'autoUpdate'
+export type ToggleSetting = 'verbose' | 'killSwitch' | 'autoConnect' | 'autoServer' | 'failover' | 'launchAtLogin' | 'autoUpdate' | 'gamingMode'
+
+export interface GamingState {
+  active: boolean
+  game?: string
+  error?: string
+}
 
 export interface UpdateState {
   status: 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error'
@@ -177,6 +184,7 @@ export interface Snapshot {
   systemProxy?: string
   testing: string[]
   update: UpdateState
+  gaming: GamingState
 }
 
 export interface ImportSummary {

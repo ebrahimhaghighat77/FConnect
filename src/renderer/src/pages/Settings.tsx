@@ -11,7 +11,8 @@ const DEFAULTS: Record<ToggleSetting, boolean> = {
   autoServer: true,
   failover: true,
   launchAtLogin: false,
-  autoUpdate: true
+  autoUpdate: true,
+  gamingMode: false
 }
 
 const GROUPS: { title: string; items: { key: ToggleSetting; label: string; detail: string }[] }[] = [
@@ -59,7 +60,7 @@ const GROUPS: { title: string; items: { key: ToggleSetting; label: string; detai
   }
 ]
 
-function Switch({ on, busy, onChange, label }: { on: boolean; busy: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Switch({ on, busy, onChange, label }: { on: boolean; busy: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button
       role="switch"

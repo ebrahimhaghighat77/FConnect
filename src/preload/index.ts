@@ -49,4 +49,4 @@ const api: FcApi = {
 } as FcApi
 
 contextBridge.exposeInMainWorld('fc', api)
-contextBridge.exposeInMainWorld('fcDev', { relaunch: call('devRelaunch'), stop: call('devStop'), autostart: call('devAutostart'), quit: call('devQuit') })
+contextBridge.exposeInMainWorld('fcDev', { relaunch: call('devRelaunch'), stop: call('devStop'), autostart: call('devAutostart'), quit: call('devQuit'), gaming: call('devGaming') })
